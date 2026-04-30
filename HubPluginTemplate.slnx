@@ -1,0 +1,13 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Plugins/">
+    <Project Path="src/Plugins/Amura.Hub.Plugin.Ecommerce.Template/Amura.Hub.Plugin.Ecommerce.Template.csproj" />
+    <Project Path="src/Plugins/Amura.Hub.Plugin.Ecommerce.Template.Tests/Amura.Hub.Plugin.Ecommerce.Template.Tests.csproj" />
+  </Folder>
+</Solution>

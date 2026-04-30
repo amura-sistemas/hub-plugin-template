@@ -1,0 +1,28 @@
+{
+  "entrypoint": "Amura.Hub.Plugin.Ecommerce.Template.Module.TemplateIntegrationModule",
+  "assembly": "Amura.Hub.Plugin.Ecommerce.Template.dll",
+  "systemName": "Ecommerce.Template",
+  "friendlyName": "Plugin Template",
+  "version": "0.1.0",
+  "group": "Ecommerce",
+  "author": "Amura",
+  "description": "Template de plugin de integracao padrao para o Amura Hub",
+  "configSchema": "config.schema.json",
+  "settingsSectionName": "Template",
+  "globalConfigurationDefaults": {
+    "endpoints": {
+      "orders": "orders",
+      "products": "products",
+      "webhooks": "webhooks"
+    }
+  },
+  "outboundTargets": [
+    {
+      "name": "main",
+      "baseUrl": "https://api.example.com",
+      "allowedHosts": [
+        "api.example.com"
+      ]
+    }
+  ]
+}

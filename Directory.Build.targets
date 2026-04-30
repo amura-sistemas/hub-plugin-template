@@ -1,0 +1,83 @@
+<Project>
+
+  <UsingTask TaskName="ReadPluginManifestMetadata"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ManifestPath ParameterType="System.String" Required="true" />
+      <SystemName ParameterType="System.String" Output="true" />
+      <Version ParameterType="System.String" Output="true" />
+      <FileVersion ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+var manifestContent = File.ReadAllText(ManifestPath);
+
+string ReadProperty(string propertyName)
+{
+    var pattern = $"\"{Regex.Escape(propertyName)}\"\\s*:\\s*\"(?<value>[^\"]+)\"";
+    var match = Regex.Match(manifestContent, pattern, RegexOptions.Multiline);
+    return match.Success ? match.Groups["value"].Value : string.Empty;
+}
+
+SystemName = ReadProperty("systemName");
+Version = ReadProperty("version");
+
+if (System.Version.TryParse(Version, out var parsedVersion))
+{
+    var build = parsedVersion.Build >= 0 ? parsedVersion.Build : 0;
+    var revision = parsedVersion.Revision >= 0 ? parsedVersion.Revision : 0;
+    FileVersion = $"{parsedVersion.Major}.{parsedVersion.Minor}.{build}.{revision}";
+}
+else
+{
+    FileVersion = "0.0.0.0";
+}
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="ResolvePluginManifestMetadata"
+          BeforeTargets="GenerateAssemblyInfo"
+          Condition="'$(IsTestProject)' != 'true' and Exists('$(MSBuildProjectDirectory)/plugin.json')">
+    <ReadPluginManifestMetadata ManifestPath="$(MSBuildProjectDirectory)/plugin.json">
+      <Output TaskParameter="SystemName" PropertyName="PluginSystemName" />
+      <Output TaskParameter="Version" PropertyName="PluginManifestVersion" />
+      <Output TaskParameter="FileVersion" PropertyName="PluginManifestFileVersion" />
+    </ReadPluginManifestMetadata>
+
+    <PropertyGroup>
+      <Version Condition="'$(PluginManifestVersion)' != ''">$(PluginManifestVersion)</Version>
+      <VersionPrefix Condition="'$(PluginManifestVersion)' != ''">$(PluginManifestVersion)</VersionPrefix>
+      <PackageVersion Condition="'$(PluginManifestVersion)' != ''">$(PluginManifestVersion)</PackageVersion>
+      <InformationalVersion Condition="'$(PluginManifestVersion)' != ''">$(PluginManifestVersion)</InformationalVersion>
+      <AssemblyVersion>$(PluginManifestFileVersion)</AssemblyVersion>
+      <FileVersion>$(PluginManifestFileVersion)</FileVersion>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="StagePluginArtifacts"
+          AfterTargets="Build"
+          DependsOnTargets="ResolvePluginManifestMetadata"
+          Condition="'$(IsTestProject)' != 'true' and Exists('$(MSBuildProjectDirectory)/plugin.json')">
+    <PropertyGroup>
+      <PluginStageDirectory>$(PluginArtifactsRoot)$(PluginSystemName)/stage/</PluginStageDirectory>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PluginStageFiles Include="$(TargetDir)*" />
+      <PluginMetadataFiles Include="$(MSBuildProjectDirectory)/plugin.json" />
+      <PluginMetadataFiles Include="$(MSBuildProjectDirectory)/config.schema.json"
+                           Condition="Exists('$(MSBuildProjectDirectory)/config.schema.json')" />
+    </ItemGroup>
+
+    <RemoveDir Directories="$(PluginStageDirectory)" />
+    <MakeDir Directories="$(PluginStageDirectory)" />
+    <Copy SourceFiles="@(PluginStageFiles)" DestinationFolder="$(PluginStageDirectory)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PluginMetadataFiles)" DestinationFolder="$(PluginStageDirectory)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

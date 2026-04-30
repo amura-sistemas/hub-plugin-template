@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "groups": [
+    { "name": "connection", "label": "Conexao" },
+    { "name": "auth", "label": "Autenticacao" },
+    { "name": "orders", "label": "Pedidos" },
+    { "name": "webhook", "label": "Webhook" }
+  ],
+  "fields": [
+    {
+      "key": "baseUri",
+      "label": "URL Base da API",
+      "type": "string",
+      "required": true,
+      "group": "connection",
+      "default": "https://api.example.com"
+    },
+    {
+      "key": "idEmpresa",
+      "label": "ID da Empresa",
+      "type": "int",
+      "required": false,
+      "group": "connection",
+      "default": "1",
+      "validation": { "min": 1 }
+    },
+    {
+      "key": "apiToken",
+      "label": "Token da API",
+      "type": "secret",
+      "required": true,
+      "group": "auth"
+    },
+    {
+      "key": "dateFilter",
+      "label": "Janela de Pedidos (dias)",
+      "type": "int",
+      "required": false,
+      "group": "orders",
+      "default": "5",
+      "validation": { "min": 1 }
+    },
+    {
+      "key": "webhookIsEnabled",
+      "label": "Habilitar Webhook",
+      "type": "bool",
+      "required": false,
+      "group": "webhook",
+      "default": "false"
+    },
+    {
+      "key": "webhookId",
+      "label": "Webhook ID",
+      "type": "string",
+      "required": false,
+      "group": "webhook"
+    },
+    {
+      "key": "webhookSecretKey",
+      "label": "Webhook Secret Key",
+      "type": "secret",
+      "required": false,
+      "group": "webhook"
+    }
+  ]
+}
