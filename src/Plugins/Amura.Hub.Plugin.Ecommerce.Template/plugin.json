@@ -10,6 +10,7 @@
   "configSchema": "config.schema.json",
   "settingsSectionName": "Template",
   "globalConfigurationDefaults": {
+    "baseUri": "https://api.example.com",
     "endpoints": {
       "orders": "orders",
       "products": "products",

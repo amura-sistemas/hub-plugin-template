@@ -1,7 +1,7 @@
 <Project>
 
   <PropertyGroup>
-    <AmuraHubPluginSdkVersion>0.2.0</AmuraHubPluginSdkVersion>
+    <AmuraHubPluginSdkVersion>0.6.1</AmuraHubPluginSdkVersion>
     <RepositoryRoot>$(MSBuildThisFileDirectory)</RepositoryRoot>
     <PluginArtifactsRoot>$(RepositoryRoot)artifacts/plugins/</PluginArtifactsRoot>
     <BuildInParallel>false</BuildInParallel>

@@ -56,7 +56,7 @@ public sealed class TemplateConfigurationResolverTests
         });
 
         var settingsAccessor = new TestPluginSettingsAccessor();
-        settingsAccessor.Seed("Variables:baseUri", "https://global.example.com");
+        settingsAccessor.Seed("BaseUri", "https://global.example.com");
         settingsAccessor.Seed("Variables:apiToken", "global-token");
 
         var sut = new TemplateConfigurationResolver(configurationStore, settingsAccessor);

@@ -27,6 +27,7 @@ validate_package() {
     local package_name
     local plugin_manifest_count
     local plugin_assembly
+    local config_schema
     local system_name
     local plugin_version
     local expected_package_name
@@ -43,6 +44,7 @@ validate_package() {
     system_name="$(read_manifest_property_from_zip "${package_path}" "systemName")"
     plugin_version="$(read_manifest_property_from_zip "${package_path}" "version")"
     plugin_assembly="$(read_manifest_property_from_zip "${package_path}" "assembly")"
+    config_schema="$(read_manifest_property_from_zip "${package_path}" "configSchema")"
     if [[ -z "${system_name}" || -z "${plugin_version}" || -z "${plugin_assembly}" ]]; then
         echo "Package ${package_path} has an invalid plugin manifest." >&2
         exit 1
@@ -59,13 +61,23 @@ validate_package() {
         exit 1
     fi
 
-    if ! unzip -Z1 "${package_path}" | grep -qx "${plugin_assembly}"; then
+    if ! unzip -Z1 "${package_path}" | grep -Fqx "${plugin_assembly}"; then
         echo "Package ${package_path} does not contain the plugin assembly ${plugin_assembly}." >&2
         exit 1
     fi
 
     if ! unzip -Z1 "${package_path}" | grep -q '\.deps\.json$'; then
         echo "Package ${package_path} does not contain a .deps.json file." >&2
+        exit 1
+    fi
+
+    if ! unzip -Z1 "${package_path}" | grep -q '\.runtimeconfig\.json$'; then
+        echo "Package ${package_path} does not contain a .runtimeconfig.json file." >&2
+        exit 1
+    fi
+
+    if [[ -n "${config_schema}" ]] && ! unzip -Z1 "${package_path}" | grep -Fqx "${config_schema}"; then
+        echo "Package ${package_path} declares configSchema ${config_schema}, but the file is missing." >&2
         exit 1
     fi
 }

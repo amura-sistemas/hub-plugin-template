@@ -17,6 +17,7 @@ public sealed class TemplateIntegrationModule : IIntegrationPlugin
         SettingsSectionName = "Template",
         GlobalConfigurationDefaults = new PluginGlobalConfigurationDefaults
         {
+            BaseUri = "https://api.example.com",
             Endpoints = new Dictionary<string, string?>
             {
                 ["orders"] = "orders",

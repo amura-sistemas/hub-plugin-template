@@ -5,7 +5,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONFIGURATION="${CONFIGURATION:-Release}"
+SOLUTION_FILE="${SOLUTION_FILE:-HubPluginTemplate.slnx}"
 NO_BUILD="false"
+
+if [[ "${SOLUTION_FILE}" != /* ]]; then
+    SOLUTION_FILE="${REPO_ROOT}/${SOLUTION_FILE}"
+fi
 
 for arg in "$@"; do
     case "${arg}" in
@@ -83,7 +88,12 @@ require_command dotnet
 require_command zip
 
 if [[ "${NO_BUILD}" != "true" ]]; then
-    dotnet build "${REPO_ROOT}/HubPluginTemplate.slnx" -c "${CONFIGURATION}"
+    if [[ ! -f "${SOLUTION_FILE}" ]]; then
+        echo "Solution file not found: ${SOLUTION_FILE}" >&2
+        exit 1
+    fi
+
+    dotnet build "${SOLUTION_FILE}" -c "${CONFIGURATION}"
 fi
 
 declare -a manifests=()

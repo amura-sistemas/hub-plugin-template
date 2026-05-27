@@ -1,26 +1,18 @@
 {
   "version": 1,
   "groups": [
-    { "name": "connection", "label": "Conexao" },
+    { "name": "company", "label": "Empresa" },
     { "name": "auth", "label": "Autenticacao" },
     { "name": "orders", "label": "Pedidos" },
     { "name": "webhook", "label": "Webhook" }
   ],
   "fields": [
     {
-      "key": "baseUri",
-      "label": "URL Base da API",
-      "type": "string",
-      "required": true,
-      "group": "connection",
-      "default": "https://api.example.com"
-    },
-    {
       "key": "idEmpresa",
       "label": "ID da Empresa",
       "type": "int",
       "required": false,
-      "group": "connection",
+      "group": "company",
       "default": "1",
       "validation": { "min": 1 }
     },
