@@ -1,45 +1,38 @@
 using Amura.Hub.Plugin.Abstractions;
 using Amura.Hub.Plugin.Configuration;
-using Amura.Hub.Plugin.Integrations.Abstractions;
 
 namespace Amura.Hub.Plugin.Ecommerce.Template.Configuration;
 
 public sealed class TemplateConfigurationResolver
 {
-    private const string SystemName = "Ecommerce.Template";
     private const string DefaultBaseUri = "https://api.example.com";
 
-    private readonly IIntegrationConfigurationStore _configurationStore;
+    private readonly PluginExecutionContext _executionContext;
     private readonly IPluginSettingsAccessor _settingsAccessor;
 
     public TemplateConfigurationResolver(
-        IIntegrationConfigurationStore configurationStore,
+        PluginExecutionContext executionContext,
         IPluginSettingsAccessor settingsAccessor)
     {
-        _configurationStore = configurationStore;
+        _executionContext = executionContext;
         _settingsAccessor = settingsAccessor;
     }
 
-    public async Task<TemplateIntegrationOptions> ResolveAsync(
-        string customerId,
-        CancellationToken cancellationToken = default)
+    public Task<TemplateIntegrationOptions> ResolveAsync(CancellationToken cancellationToken = default)
     {
-        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        var configuration = await _configurationStore.GetAsync(customerId, SystemName, cancellationToken);
+        _ = cancellationToken;
 
-        if (configuration is not null)
+        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in _executionContext.Configuration)
         {
-            foreach (var (key, value) in configuration.Values)
+            var normalizedKey = NormalizeKey(key);
+            if (!string.IsNullOrWhiteSpace(normalizedKey))
             {
-                var normalizedKey = NormalizeKey(key);
-                if (!string.IsNullOrWhiteSpace(normalizedKey))
-                {
-                    values[normalizedKey] = value;
-                }
+                values[normalizedKey] = value;
             }
         }
 
-        return BuildOptions(customerId, values, _settingsAccessor);
+        return Task.FromResult(BuildOptions(_executionContext.CustomerId, values, _settingsAccessor));
     }
 
     private static TemplateIntegrationOptions BuildOptions(
@@ -71,10 +64,9 @@ public sealed class TemplateConfigurationResolver
             HasIntegrationOrdersEnabled = GetBool(values, "integrateOrders", true),
             HasIntegrationProductsEnabled = GetBool(values, "integrateProducts", true),
             PublishCategories = GetBool(values, "publishCategories"),
-            SimpleProduct = string.Equals(GetString(values, "publicationType"), "Simple", StringComparison.OrdinalIgnoreCase),
-            WebhookIsEnabled = GetBool(values, "webhookIsEnabled"),
-            WebhookId = GetString(values, "webhookId"),
-            WebhookSecretKey = GetString(values, "webhookSecretKey")
+            SimpleProduct = GetBool(values, "simpleProduct"),
+            HasCreateProductCodRefMaisCodCor = GetBool(values, "hasCreateProductCodRefMaisCodCor"),
+            WebhookIsEnabled = GetBool(values, "webhookIsEnabled")
         };
     }
 
@@ -119,11 +111,9 @@ public sealed class TemplateConfigurationResolver
             "hasintegrationproductsenabled" => "integrateProducts",
             "publishcategories" => "publishCategories",
             "hascreatecategoriesenabled" => "publishCategories",
-            "publicationtype" => "publicationType",
-            "simpleproduct" => "publicationType",
+            "simpleproduct" => "simpleProduct",
+            "hascreateproductcodrefmaiscodcor" => "hasCreateProductCodRefMaisCodCor",
             "webhookisenabled" => "webhookIsEnabled",
-            "webhookid" => "webhookId",
-            "webhooksecretkey" => "webhookSecretKey",
             _ => trimmed
         };
     }

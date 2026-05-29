@@ -1,10 +1,10 @@
 using Amura.Hub.Plugin.Application.Events;
 using Amura.Hub.Plugin.Application.Services;
-using Amura.Hub.Plugin.Domain.AggregatesModel.LogAggregate;
 using Amura.Hub.Plugin.Ecommerce.Template.Configuration;
+using Amura.Hub.Plugin.Ecommerce.Template.Models;
 using Amura.Hub.Plugin.Ecommerce.Template.Services;
+using Amura.Hub.Plugin.Domain.AggregatesModel.ImportAggregate;
 using Amura.Hub.Plugin.Orders.Abstractions;
-using PluginLogger = Amura.Hub.Plugin.Application.Services.ILogger;
 
 namespace Amura.Hub.Plugin.Ecommerce.Template.EventHandlers;
 
@@ -14,51 +14,89 @@ public sealed class OrderEventHandler : IOrderPullHandler
 
     private readonly TemplateConfigurationResolver _configurationResolver;
     private readonly TemplateService _templateService;
-    private readonly PluginLogger _logger;
+    private readonly IPluginOrderImportService _orderImportService;
+    private readonly IPluginLogger _logger;
 
     public OrderEventHandler(
         TemplateConfigurationResolver configurationResolver,
         TemplateService templateService,
-        PluginLogger logger)
+        IPluginOrderImportService orderImportService,
+        IPluginLogger logger)
     {
         _configurationResolver = configurationResolver;
         _templateService = templateService;
+        _orderImportService = orderImportService;
         _logger = logger;
     }
 
     public async Task HandleAsync(OrderEvent notification, CancellationToken cancellationToken = default)
     {
-        if (notification.Customer is null)
-        {
-            return;
-        }
-
         var customer = notification.Customer;
-        var plugin = customer.Plugins.FirstOrDefault(p =>
-            p.IsEnabled &&
-            p.SystemName.Equals(SystemName, StringComparison.OrdinalIgnoreCase));
-
-        if (plugin is null)
+        if (customer is null)
         {
             return;
         }
 
-        var options = await _configurationResolver.ResolveAsync(customer.Id, cancellationToken);
-        if (!options.HasIntegrationOrdersEnabled)
+        try
         {
-            return;
+            var options = await _configurationResolver.ResolveAsync(cancellationToken);
+            if (!options.HasIntegrationOrdersEnabled)
+            {
+                return;
+            }
+
+            var updatedAtMinUtc = DateTime.UtcNow.AddDays(-Math.Max(1, options.DateFilter));
+            var orders = await _templateService.GetOrdersAsync(options, updatedAtMinUtc, cancellationToken);
+
+            var importedCount = 0;
+            var skippedCount = 0;
+
+            foreach (var order in orders)
+            {
+                var orderId = order.Id.Trim();
+                if (string.IsNullOrWhiteSpace(orderId))
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                var (integration, status) = TemplateOrderMapper.Build(order, options, customer);
+                var registration = await _orderImportService.RegisterAsync(
+                    new OrderImportRegistration
+                    {
+                        ExternalOrderId = orderId,
+                        StatusOrder = status,
+                        Order = integration
+                    },
+                    cancellationToken);
+
+                if (registration.Duplicate)
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                importedCount++;
+            }
+
+            if (importedCount == 0 && skippedCount == 0)
+            {
+                return;
+            }
+
+            await _logger.WriteAsync(
+                PluginLogLevel.Information,
+                $"Template: {importedCount} pedidos importados com sucesso",
+                $"Cliente: {customer.Company} (ID: {customer.Id}). Ignorados: {skippedCount}",
+                cancellationToken);
         }
-
-        var updatedAtMinUtc = DateTime.UtcNow.AddDays(-Math.Max(1, options.DateFilter));
-        var orders = await _templateService.GetOrdersAsync(options, updatedAtMinUtc, cancellationToken);
-
-        await _logger.InsertLogAsync(
-            LogLevel.Information,
-            $"Template: {orders.Count} pedidos consultados",
-            $"Cliente: {customer.Company} (ID: {customer.Id})",
-            customer,
-            cancellationToken);
-
-        // Substitua este ponto pelo mapeamento para OrderIntegrationDto e gravacao de Import/HistoryOrder.
+        catch (Exception ex)
+        {
+            await _logger.WriteAsync(
+                PluginLogLevel.Error,
+                "Erro ao processar pedidos Template",
+                ex.ToString(),
+                cancellationToken);
+        }
     }
 }

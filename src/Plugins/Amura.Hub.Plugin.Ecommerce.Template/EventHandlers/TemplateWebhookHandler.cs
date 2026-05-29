@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Amura.Hub.Plugin.Application.Events;
 using Amura.Hub.Plugin.Application.Services;
 using Amura.Hub.Plugin.Ecommerce.Template.Configuration;
-using Amura.Hub.Plugin.Ecommerce.Template.Services;
+using Amura.Hub.Plugin.Ecommerce.Template.Models;
+using Amura.Hub.Plugin.Domain.AggregatesModel.ImportAggregate;
 using Amura.Hub.Plugin.Webhooks;
 using Amura.Hub.Plugin.Webhooks.Abstractions;
 
@@ -9,32 +11,33 @@ namespace Amura.Hub.Plugin.Ecommerce.Template.EventHandlers;
 
 public sealed class TemplateWebhookHandler : IPluginWebhookHandler
 {
-    private const string SystemName = "Ecommerce.Template";
     private const string SignatureHeader = "X-Template-Signature";
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
-    private readonly TemplateWebhookCustomerResolver _webhookCustomerResolver;
     private readonly TemplateConfigurationResolver _configurationResolver;
-    private readonly ICustomerService _customerService;
-    private readonly OrderEventHandler _orderEventHandler;
+    private readonly IPluginOrderImportService _orderImportService;
+    private readonly IPluginLogger _logger;
 
     public TemplateWebhookHandler(
-        TemplateWebhookCustomerResolver webhookCustomerResolver,
         TemplateConfigurationResolver configurationResolver,
-        ICustomerService customerService,
-        OrderEventHandler orderEventHandler)
+        IPluginOrderImportService orderImportService,
+        IPluginLogger logger)
     {
-        _webhookCustomerResolver = webhookCustomerResolver;
         _configurationResolver = configurationResolver;
-        _customerService = customerService;
-        _orderEventHandler = orderEventHandler;
+        _orderImportService = orderImportService;
+        _logger = logger;
     }
 
     public Task<PluginWebhookRegistration> GenerateRegistrationAsync(
         PluginWebhookGenerateContext context,
         CancellationToken cancellationToken = default)
     {
+        _ = context;
+
         return PluginWebhookRegistrationFactory.GenerateAsync(
-            _webhookCustomerResolver,
             "orders",
             SignatureHeader,
             cancellationToken);
@@ -44,10 +47,10 @@ public sealed class TemplateWebhookHandler : IPluginWebhookHandler
         PluginWebhookRequest request,
         CancellationToken cancellationToken = default)
     {
-        var customerId = await _webhookCustomerResolver.ResolveCustomerIdAsync(request.WebhookId, cancellationToken);
-        if (string.IsNullOrWhiteSpace(customerId))
+        var customer = request.Customer;
+        if (customer is null)
         {
-            return PluginWebhookResult.NotFound("Webhook Template nao encontrado ou desabilitado.");
+            return PluginWebhookResult.NotFound("Webhook não encontrado ou desabilitado.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Payload))
@@ -55,39 +58,55 @@ public sealed class TemplateWebhookHandler : IPluginWebhookHandler
             return PluginWebhookResult.BadRequest("Payload do webhook vazio.");
         }
 
-        var options = await _configurationResolver.ResolveAsync(customerId, cancellationToken);
-        if (!options.WebhookIsEnabled)
+        try
         {
-            return PluginWebhookResult.BadRequest("Webhook Template esta desabilitado.");
+            var options = await _configurationResolver.ResolveAsync(cancellationToken);
+            if (!options.WebhookIsEnabled)
+            {
+                return PluginWebhookResult.BadRequest("Webhook Template está desabilitado.");
+            }
+
+            var order = JsonSerializer.Deserialize<TemplateOrder>(request.Payload, JsonOptions);
+            if (order is null || string.IsNullOrWhiteSpace(order.Id))
+            {
+                return PluginWebhookResult.BadRequest("Pedido do webhook inválido.");
+            }
+
+            var (integration, status) = TemplateOrderMapper.Build(order, options, customer);
+            var registration = await _orderImportService.RegisterAsync(
+                new OrderImportRegistration
+                {
+                    ExternalOrderId = order.Id.Trim(),
+                    StatusOrder = status,
+                    Order = integration,
+                    RawPayload = request.Payload
+                },
+                cancellationToken);
+
+            if (!registration.Duplicate)
+            {
+                await _logger.WriteAsync(
+                    PluginLogLevel.Information,
+                    $"Template webhook: pedido {order.Id.Trim()} importado com sucesso",
+                    $"Cliente: {customer.Company} (ID: {customer.Id})",
+                    cancellationToken);
+            }
+
+            return PluginWebhookResult.Ok("Webhook processado com sucesso.");
         }
-
-        var signature = PluginWebhookSecurity.GetFirstNotEmptyHeader(request.Headers, SignatureHeader);
-        if (!PluginWebhookSecurity.ValidateHmacSha256(signature, request.Payload, options.WebhookSecretKey))
+        catch (JsonException)
         {
-            return PluginWebhookResult.Unauthorized();
+            return PluginWebhookResult.BadRequest("Payload do webhook inválido.");
         }
-
-        var customer = await _customerService.GetByIdAsync(customerId, cancellationToken);
-        if (customer is null)
+        catch (Exception ex)
         {
-            return PluginWebhookResult.NotFound("Cliente nao encontrado para o webhook informado.");
+            await _logger.WriteAsync(
+                PluginLogLevel.Error,
+                "Erro ao processar webhook Template",
+                ex.ToString(),
+                cancellationToken);
+
+            return PluginWebhookResult.BadRequest("Erro ao processar webhook Template.");
         }
-
-        var plugin = customer.Plugins.FirstOrDefault(p =>
-            p.IsEnabled &&
-            p.SystemName.Equals(SystemName, StringComparison.OrdinalIgnoreCase));
-
-        if (plugin is null)
-        {
-            return PluginWebhookResult.NotFound("Plugin Template nao esta habilitado para o cliente informado.");
-        }
-
-        await _orderEventHandler.HandleAsync(new OrderEvent
-        {
-            Customer = customer,
-            IsEventManual = true
-        }, cancellationToken);
-
-        return PluginWebhookResult.Ok("Webhook processado com sucesso.");
     }
 }

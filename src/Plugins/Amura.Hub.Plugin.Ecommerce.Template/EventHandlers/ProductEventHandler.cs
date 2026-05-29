@@ -1,9 +1,8 @@
 using Amura.Hub.Plugin.Application.Events;
 using Amura.Hub.Plugin.Application.Services;
-using Amura.Hub.Plugin.Domain.AggregatesModel.LogAggregate;
 using Amura.Hub.Plugin.Ecommerce.Template.Configuration;
+using Amura.Hub.Plugin.Ecommerce.Template.Services;
 using Amura.Hub.Plugin.Products.Abstractions;
-using PluginLogger = Amura.Hub.Plugin.Application.Services.ILogger;
 
 namespace Amura.Hub.Plugin.Ecommerce.Template.EventHandlers;
 
@@ -12,46 +11,117 @@ public sealed class ProductEventHandler : IProductPublishHandler
     private const string SystemName = "Ecommerce.Template";
 
     private readonly TemplateConfigurationResolver _configurationResolver;
-    private readonly PluginLogger _logger;
+    private readonly TemplateService _templateService;
+    private readonly IPluginLogger _logger;
 
     public ProductEventHandler(
         TemplateConfigurationResolver configurationResolver,
-        PluginLogger logger)
+        TemplateService templateService,
+        IPluginLogger logger)
     {
         _configurationResolver = configurationResolver;
+        _templateService = templateService;
         _logger = logger;
     }
 
     public async Task HandleAsync(ProductEvent notification, CancellationToken cancellationToken = default)
     {
-        if (notification.Customer is null)
-        {
-            return;
-        }
-
         var customer = notification.Customer;
-        var plugin = customer.Plugins.FirstOrDefault(p =>
-            p.IsEnabled &&
-            p.SystemName.Equals(SystemName, StringComparison.OrdinalIgnoreCase));
-
-        if (plugin is null)
+        if (customer is null)
         {
             return;
         }
 
-        var options = await _configurationResolver.ResolveAsync(customer.Id, cancellationToken);
-        if (!options.HasIntegrationProductsEnabled)
+        try
         {
-            return;
+            var options = await _configurationResolver.ResolveAsync(cancellationToken);
+            if (!options.HasIntegrationProductsEnabled)
+            {
+                notification.SetDispatchFailure(
+                    SystemName,
+                    "Integracao de produtos desabilitada para este plugin.",
+                    "PLUGIN_PRODUCT_INTEGRATION_DISABLED");
+                return;
+            }
+
+            var results = new List<ProductDispatchItemResult>();
+
+            foreach (var product in notification.Products)
+            {
+                var reference = product.GetProductReference(options.SimpleProduct, options.HasCreateProductCodRefMaisCodCor);
+                if (string.IsNullOrWhiteSpace(reference))
+                {
+                    results.Add(new ProductDispatchItemResult
+                    {
+                        ProductId = string.Empty,
+                        ProductName = product.Descricao,
+                        Success = false,
+                        ErrorCode = "PRODUCT_REFERENCE_MISSING",
+                        Error = "Referência do produto inválida."
+                    });
+
+                    continue;
+                }
+
+                var existing = await _templateService.GetProductBySkuAsync(options, reference, cancellationToken);
+                if (existing is null)
+                {
+                    results.Add(new ProductDispatchItemResult
+                    {
+                        ProductId = reference,
+                        ProductName = product.Descricao,
+                        Success = false,
+                        ErrorCode = "PRODUCT_NOT_FOUND",
+                        Error = "Produto não localizado na origem."
+                    });
+
+                    continue;
+                }
+
+                results.Add(new ProductDispatchItemResult
+                {
+                    ProductId = reference,
+                    ProductName = existing.Name,
+                    Success = true,
+                    ExternalId = existing.Sku,
+                    Action = "Verificado"
+                });
+            }
+
+            if (results.Count == 0)
+            {
+                notification.SetDispatchFailure(
+                    SystemName,
+                    "Nenhum produto válido foi encontrado no lote.",
+                    "PLUGIN_NO_VALID_PRODUCTS");
+                return;
+            }
+
+            var hasFailures = results.Any(result => !result.Success);
+            notification.SetDispatchResult(
+                SystemName,
+                results,
+                hasFailures
+                    ? "Template: alguns produtos não foram encontrados"
+                    : "Template: produtos verificados com sucesso",
+                hasFailures ? "PRODUCTS_NOT_FOUND" : null);
+
+            await _logger.WriteAsync(
+                hasFailures ? PluginLogLevel.Warning : PluginLogLevel.Information,
+                hasFailures
+                    ? $"Template: {results.Count(result => result.Success)}/{results.Count} produtos verificados"
+                    : $"Template: {results.Count} produtos verificados com sucesso",
+                $"Cliente: {customer.Company} (ID: {customer.Id})",
+                cancellationToken);
         }
-
-        await _logger.InsertLogAsync(
-            LogLevel.Information,
-            $"Template: {notification.Products.Count} produtos recebidos para publicacao",
-            $"Cliente: {customer.Company} (ID: {customer.Id})",
-            customer,
-            cancellationToken);
-
-        // Substitua este ponto por busca/criacao/atualizacao de produtos na API externa.
+        catch (Exception ex)
+        {
+            notification.SetDispatchFailure(SystemName, ex.Message);
+            await _logger.WriteAsync(
+                PluginLogLevel.Error,
+                "Erro ao processar produtos Template",
+                ex.ToString(),
+                cancellationToken);
+        }
     }
 }

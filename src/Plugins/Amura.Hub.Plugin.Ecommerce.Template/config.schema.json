@@ -3,6 +3,7 @@
   "groups": [
     { "name": "company", "label": "Empresa" },
     { "name": "auth", "label": "Autenticacao" },
+    { "name": "products", "label": "Produtos" },
     { "name": "orders", "label": "Pedidos" },
     { "name": "webhook", "label": "Webhook" }
   ],
@@ -33,26 +34,28 @@
       "validation": { "min": 1 }
     },
     {
+      "key": "simpleProduct",
+      "label": "Produto Simples",
+      "type": "bool",
+      "required": false,
+      "group": "products",
+      "default": "false"
+    },
+    {
+      "key": "hasCreateProductCodRefMaisCodCor",
+      "label": "Usar referência + cor",
+      "type": "bool",
+      "required": false,
+      "group": "products",
+      "default": "false"
+    },
+    {
       "key": "webhookIsEnabled",
       "label": "Habilitar Webhook",
       "type": "bool",
       "required": false,
       "group": "webhook",
       "default": "false"
-    },
-    {
-      "key": "webhookId",
-      "label": "Webhook ID",
-      "type": "string",
-      "required": false,
-      "group": "webhook"
-    },
-    {
-      "key": "webhookSecretKey",
-      "label": "Webhook Secret Key",
-      "type": "secret",
-      "required": false,
-      "group": "webhook"
     }
   ]
 }

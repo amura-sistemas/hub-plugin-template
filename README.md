@@ -42,7 +42,7 @@ Nao e necessario ter o repositorio `HubIntegracao` ao lado deste template para c
 A versao do SDK fica centralizada em `Directory.Build.props`:
 
 ```xml
-<AmuraHubPluginSdkVersion>0.6.1</AmuraHubPluginSdkVersion>
+<AmuraHubPluginSdkVersion>1.0.2</AmuraHubPluginSdkVersion>
 ```
 
 Antes de distribuir um plugin, confirme que esta versao ainda e a mais recente no NuGet.org:
@@ -371,6 +371,7 @@ Configuracao por cliente:
 - Persistida por `customerId + systemName`.
 - Renderizada a partir de `config.schema.json`.
 - Deve conter credenciais e preferencias especificas daquele cliente.
+- Fica disponivel no runtime via `PluginExecutionContext.Configuration`.
 
 O resolver do template aceita aliases legados, como `baseUri`, `apiUrl`, `hasIntegrationOrdersEnabled` e `simpleProduct`, para manter compatibilidade com configuracoes antigas. Novos plugins devem seguir o contrato atual.
 
@@ -378,7 +379,7 @@ O resolver do template aceita aliases legados, como `baseUri`, `apiUrl`, `hasInt
 
 `TemplateConfigurationResolver` combina:
 
-1. Configuracao por cliente vinda de `IIntegrationConfigurationStore`.
+1. Configuracao de runtime vinda de `PluginExecutionContext.Configuration`.
 2. Settings globais vindos de `IPluginSettingsAccessor`.
 3. Defaults seguros do plugin.
 
@@ -388,7 +389,7 @@ Prioridade recomendada:
 2. Valor global/admin.
 3. Default do plugin.
 
-`baseUri` permanece aceito por cliente apenas por compatibilidade legada. Para novos plugins, declare `baseUri` em `globalConfigurationDefaults` e leia via `PluginGlobalSettings.GetBaseUri` ou `IPluginSettingsAccessor`.
+`baseUri` permanece aceito por compatibilidade legada. Para novos plugins, declare `baseUri` em `globalConfigurationDefaults` e leia via `PluginGlobalSettings.GetBaseUri` ou `IPluginSettingsAccessor`.
 
 ## Outbound HTTP
 
@@ -427,10 +428,11 @@ POST /api/webhook/{systemName}/runtime/{webhookId}/{resource}
 Implemente `IPluginWebhookHandler` para:
 
 - gerar registro com `PluginWebhookRegistrationFactory`;
-- resolver cliente pelo `webhookId`;
-- validar assinatura quando a plataforma envia HMAC;
+- receber `PluginWebhookRequest` com o cliente ja resolvido pelo host;
 - processar payload ou delegar para um handler existente;
 - retornar `PluginWebhookResult` adequado.
+
+A validacao de assinatura e o roteamento por `webhookId` ficam no host. O plugin nao deve resolver cliente, secret ou header de autenticacao.
 
 ## Empacotamento
 

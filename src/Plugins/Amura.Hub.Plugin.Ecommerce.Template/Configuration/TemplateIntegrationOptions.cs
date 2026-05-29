@@ -14,7 +14,6 @@ public sealed class TemplateIntegrationOptions
     public bool HasIntegrationProductsEnabled { get; init; } = true;
     public bool PublishCategories { get; init; }
     public bool SimpleProduct { get; init; }
+    public bool HasCreateProductCodRefMaisCodCor { get; init; }
     public bool WebhookIsEnabled { get; init; }
-    public string? WebhookId { get; init; }
-    public string? WebhookSecretKey { get; init; }
 }

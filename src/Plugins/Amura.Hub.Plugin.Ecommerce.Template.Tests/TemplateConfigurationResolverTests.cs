@@ -1,3 +1,4 @@
+using Amura.Hub.Plugin.Abstractions;
 using Amura.Hub.Plugin.Ecommerce.Template.Configuration;
 using FluentAssertions;
 using Xunit;
@@ -7,21 +8,19 @@ namespace Amura.Hub.Plugin.Ecommerce.Template.Tests;
 public sealed class TemplateConfigurationResolverTests
 {
     private const string CustomerId = "customer-template";
-    private const string SystemName = "Ecommerce.Template";
 
     [Fact]
-    public async Task ResolveAsync_ShouldBuildOptionsFromCustomerConfiguration()
+    public async Task ResolveAsync_ShouldBuildOptionsFromExecutionContextConfiguration()
     {
-        var configurationStore = new TestIntegrationConfigurationStore();
-        configurationStore.Seed(CustomerId, SystemName, new Dictionary<string, string?>
+        var executionContext = CreateContext(new Dictionary<string, string?>
         {
             ["baseUri"] = "https://tenant.example.com/api",
             ["apiToken"] = "customer-token",
             ["idEmpresa"] = "77",
             ["dateFilter"] = "9",
-            ["webhookIsEnabled"] = "true",
-            ["webhookId"] = "2345",
-            ["webhookSecretKey"] = "webhook-secret"
+            ["simpleProduct"] = "true",
+            ["hasCreateProductCodRefMaisCodCor"] = "true",
+            ["webhookIsEnabled"] = "true"
         });
 
         var settingsAccessor = new TestPluginSettingsAccessor();
@@ -29,9 +28,9 @@ public sealed class TemplateConfigurationResolverTests
         settingsAccessor.Seed("Endpoints:products", "custom-products");
         settingsAccessor.Seed("Endpoints:webhooks", "custom-webhooks");
 
-        var sut = new TemplateConfigurationResolver(configurationStore, settingsAccessor);
+        var sut = new TemplateConfigurationResolver(executionContext, settingsAccessor);
 
-        var options = await sut.ResolveAsync(CustomerId, CancellationToken.None);
+        var options = await sut.ResolveAsync(CancellationToken.None);
 
         options.CustomerId.Should().Be(CustomerId);
         options.BaseUri.Should().Be("https://tenant.example.com/api/");
@@ -42,15 +41,14 @@ public sealed class TemplateConfigurationResolverTests
         options.EndPointProducts.Should().Be("custom-products");
         options.EndPointWebhooks.Should().Be("custom-webhooks");
         options.WebhookIsEnabled.Should().BeTrue();
-        options.WebhookId.Should().Be("2345");
-        options.WebhookSecretKey.Should().Be("webhook-secret");
+        options.SimpleProduct.Should().BeTrue();
+        options.HasCreateProductCodRefMaisCodCor.Should().BeTrue();
     }
 
     [Fact]
-    public async Task ResolveAsync_ShouldFallbackToGlobalSettings_WhenCustomerValuesAreMissing()
+    public async Task ResolveAsync_ShouldFallbackToGlobalSettings_WhenExecutionContextValuesAreMissing()
     {
-        var configurationStore = new TestIntegrationConfigurationStore();
-        configurationStore.Seed(CustomerId, SystemName, new Dictionary<string, string?>
+        var executionContext = CreateContext(new Dictionary<string, string?>
         {
             ["idEmpresa"] = "3"
         });
@@ -59,9 +57,9 @@ public sealed class TemplateConfigurationResolverTests
         settingsAccessor.Seed("BaseUri", "https://global.example.com");
         settingsAccessor.Seed("Variables:apiToken", "global-token");
 
-        var sut = new TemplateConfigurationResolver(configurationStore, settingsAccessor);
+        var sut = new TemplateConfigurationResolver(executionContext, settingsAccessor);
 
-        var options = await sut.ResolveAsync(CustomerId, CancellationToken.None);
+        var options = await sut.ResolveAsync(CancellationToken.None);
 
         options.BaseUri.Should().Be("https://global.example.com/");
         options.ApiToken.Should().Be("global-token");
@@ -82,10 +80,10 @@ public sealed class TemplateConfigurationResolverTests
     public async Task ResolveAsync_ShouldUseSafeDefaults_WhenConfigurationDoesNotExist()
     {
         var sut = new TemplateConfigurationResolver(
-            new TestIntegrationConfigurationStore(),
+            CreateContext(),
             new TestPluginSettingsAccessor());
 
-        var options = await sut.ResolveAsync(CustomerId, CancellationToken.None);
+        var options = await sut.ResolveAsync(CancellationToken.None);
 
         options.CustomerId.Should().Be(CustomerId);
         options.BaseUri.Should().Be("https://api.example.com/");
@@ -94,5 +92,21 @@ public sealed class TemplateConfigurationResolverTests
         options.EndPointWebhooks.Should().Be("webhooks");
         options.DateFilter.Should().Be(5);
         options.IdEmpresa.Should().Be(1);
+    }
+
+    private static PluginExecutionContext CreateContext(IReadOnlyDictionary<string, string?>? configuration = null)
+    {
+        return new PluginExecutionContext
+        {
+            CustomerId = CustomerId,
+            SystemName = "Ecommerce.Template",
+            Customer = new PluginCustomerContext
+            {
+                Id = CustomerId,
+                Company = "Amura",
+                Email = "contato@amura.test"
+            },
+            Configuration = configuration ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        };
     }
 }
